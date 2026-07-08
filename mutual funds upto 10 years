@@ -1,0 +1,193 @@
+"""
+Indian Mutual Fund Industry — Competition Analysis (2015–2025)
+================================================================
+
+WHAT THIS SCRIPT DOES
+----------------------
+1. Tracks total industry AUM (Assets Under Management) growth, 2015-2025.
+2. Tracks market share of the top Asset Management Companies (AMCs) —
+   SBI MF, ICICI Prudential, HDFC MF, Nippon India, Kotak Mahindra,
+   Aditya Birla Sun Life, and "Others" — over the same period.
+3. Computes competition/concentration metrics:
+      - CAGR (Compound Annual Growth Rate) of the industry and each AMC
+      - HHI (Herfindahl-Hirschman Index) to measure how concentrated
+        (i.e. how "competitive") the market is each year
+      - Year-on-year market-share leader
+4. Plots three charts:
+      - Total industry AUM growth
+      - Market share trend of top AMCs (stacked area)
+      - HHI trend (competition intensity)
+
+⚠️ DATA NOTE (IMPORTANT)
+-------------------------
+The AUM and market-share figures below are APPROXIMATE / ILLUSTRATIVE,
+built from publicly reported industry milestones (e.g. total industry
+AUM rising from ~₹13.5 lakh crore in 2015 to ~₹75 lakh crore in 2025,
+with SBI, ICICI Prudential and HDFC consistently ranking as the top 3
+AMCs). They are good enough to demonstrate the analysis and produce
+realistic-looking trends, but they are NOT official AMFI figures.
+
+For exact numbers, download the real historical data (free, no login)
+from AMFI here and replace the `industry_aum` / `market_share` dicts:
+    https://www.amfiindia.com/research-information/aum-data
+    https://www.amfiindia.com/research-information/other-data/amc-wise-aum
+
+Once you have the real CSV, you can swap the DATA SECTION below with
+`pd.read_csv(...)` calls — the rest of the script (metrics + plots)
+will work unchanged.
+"""
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+
+# ----------------------------------------------------------------------
+# 1. DATA SECTION (replace with real AMFI data for production use)
+# ----------------------------------------------------------------------
+
+years = list(range(2015, 2026))
+
+# Total Indian Mutual Fund industry AUM, in ₹ Lakh Crore (≈ ₹ Trillion)
+industry_aum = {
+    2015: 13.5,
+    2016: 15.7,
+    2017: 21.3,
+    2018: 23.9,
+    2019: 23.8,
+    2020: 27.0,
+    2021: 37.7,
+    2022: 39.4,
+    2023: 44.4,
+    2024: 53.4,
+    2025: 75.4,
+}
+
+# Approximate market share (%) of top AMCs by year.
+# Rows must sum to 100 for each year.
+market_share = {
+    #            2015  2016  2017  2018  2019  2020  2021  2022  2023  2024  2025
+    "SBI MF":            [11.0, 11.6, 12.3, 13.0, 13.8, 14.7, 15.5, 16.2, 16.8, 17.2, 17.5],
+    "ICICI Prudential":  [12.5, 12.7, 12.9, 13.0, 12.8, 12.6, 12.4, 12.5, 12.7, 13.0, 13.2],
+    "HDFC MF":           [14.0, 13.8, 13.4, 13.0, 12.5, 12.0, 11.5, 11.3, 11.0, 10.8, 10.7],
+    "Nippon India":      [9.5,  9.2,  8.8,  8.2,  7.6,  7.2,  7.0,  6.9,  6.8,  6.7,  6.6],
+    "Kotak Mahindra":    [4.5,  4.8,  5.0,  5.3,  5.6,  5.8,  6.0,  6.2,  6.4,  6.6,  6.8],
+    "Aditya Birla SL":   [9.0,  8.8,  8.5,  8.2,  7.8,  7.4,  7.0,  6.7,  6.4,  6.1,  5.8],
+    "Others":            [39.5, 39.1, 39.1, 39.3, 39.9, 40.3, 40.6, 40.2, 39.9, 39.6, 39.4],
+}
+
+df_share = pd.DataFrame(market_share, index=years)
+df_aum = pd.Series(industry_aum, name="Total AUM (₹ Lakh Crore)")
+
+assert np.allclose(df_share.sum(axis=1), 100), "Market shares must sum to 100% each year"
+
+# ----------------------------------------------------------------------
+# 2. METRICS
+# ----------------------------------------------------------------------
+
+def cagr(start_value, end_value, periods):
+    """Compound Annual Growth Rate."""
+    return (end_value / start_value) ** (1 / periods) - 1
+
+
+def herfindahl_hirschman_index(share_row):
+    """
+    HHI = sum of squared market shares (shares as %, e.g. 20 not 0.20).
+    HHI < 1500  -> competitive market
+    1500-2500   -> moderately concentrated
+    HHI > 2500  -> highly concentrated (less competitive)
+    """
+    return (share_row ** 2).sum()
+
+
+# Industry-level CAGR, 2015 -> 2025
+industry_cagr = cagr(df_aum.loc[2015], df_aum.loc[2025], 2025 - 2015)
+
+# Per-AMC AUM in absolute terms (share % x total industry AUM)
+df_amc_aum = df_share.div(100).multiply(df_aum, axis=0)
+
+# Per-AMC CAGR, 2015 -> 2025
+amc_cagr = {
+    amc: cagr(df_amc_aum.loc[2015, amc], df_amc_aum.loc[2025, amc], 2025 - 2015)
+    for amc in df_share.columns
+}
+
+# HHI per year
+hhi_by_year = df_share.apply(herfindahl_hirschman_index, axis=1)
+
+# Market leader each year
+leader_by_year = df_share.drop(columns="Others").idxmax(axis=1)
+
+# ----------------------------------------------------------------------
+# 3. TEXT SUMMARY
+# ----------------------------------------------------------------------
+
+print("=" * 70)
+print("INDIAN MUTUAL FUND INDUSTRY — COMPETITION SUMMARY (2015-2025)")
+print("=" * 70)
+
+print(f"\nTotal industry AUM: ₹{df_aum.loc[2015]:.1f} lakh crore (2015) "
+      f"→ ₹{df_aum.loc[2025]:.1f} lakh crore (2025)")
+print(f"Industry CAGR (2015-2025): {industry_cagr * 100:.1f}% per year")
+
+print("\nAMC-wise CAGR (2015-2025), sorted by growth:")
+for amc, g in sorted(amc_cagr.items(), key=lambda x: -x[1]):
+    print(f"  {amc:<18}: {g * 100:5.1f}% CAGR")
+
+print("\nMarket leader by year (excluding 'Others'):")
+for yr in years:
+    print(f"  {yr}: {leader_by_year.loc[yr]} ({df_share.loc[yr, leader_by_year.loc[yr]]:.1f}% share)")
+
+print("\nHHI (market concentration) trend:")
+for yr in years:
+    hhi = hhi_by_year.loc[yr]
+    if hhi < 1500:
+        band = "Competitive"
+    elif hhi < 2500:
+        band = "Moderately concentrated"
+    else:
+        band = "Highly concentrated"
+    print(f"  {yr}: HHI = {hhi:6.1f}  →  {band}")
+
+# ----------------------------------------------------------------------
+# 4. CHARTS
+# ----------------------------------------------------------------------
+
+fig, axes = plt.subplots(3, 1, figsize=(11, 15))
+
+# --- Chart 1: Total industry AUM growth ---
+axes[0].plot(years, df_aum.values, marker="o", linewidth=2, color="#1f77b4")
+axes[0].set_title("Indian Mutual Fund Industry — Total AUM Growth (2015–2025)", fontsize=13, fontweight="bold")
+axes[0].set_ylabel("AUM (₹ Lakh Crore)")
+axes[0].set_xlabel("Year")
+axes[0].grid(alpha=0.3)
+for x, y in zip(years, df_aum.values):
+    axes[0].annotate(f"{y:.1f}", (x, y), textcoords="offset points", xytext=(0, 8), ha="center", fontsize=8)
+
+# --- Chart 2: Market share trend (stacked area) ---
+axes[1].stackplot(years, [df_share[c] for c in df_share.columns], labels=df_share.columns, alpha=0.85)
+axes[1].set_title("Market Share Trend of Top AMCs (2015–2025)", fontsize=13, fontweight="bold")
+axes[1].set_ylabel("Market Share (%)")
+axes[1].set_xlabel("Year")
+axes[1].legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), ncol=4, fontsize=8)
+axes[1].set_ylim(0, 100)
+
+# --- Chart 3: HHI trend ---
+axes[2].plot(years, hhi_by_year.values, marker="s", linewidth=2, color="#d62728")
+axes[2].axhline(1500, color="green", linestyle="--", linewidth=1, label="Competitive threshold (1500)")
+axes[2].axhline(2500, color="orange", linestyle="--", linewidth=1, label="High concentration threshold (2500)")
+axes[2].set_title("Market Concentration (HHI) — Lower = More Competitive", fontsize=13, fontweight="bold")
+axes[2].set_ylabel("HHI")
+axes[2].set_xlabel("Year")
+axes[2].legend(fontsize=8)
+axes[2].grid(alpha=0.3)
+
+plt.tight_layout()
+plt.savefig("/mnt/user-data/outputs/mf_competition_india.png", dpi=150, bbox_inches="tight")
+print("\nCharts saved to mf_competition_india.png")
+
+# ----------------------------------------------------------------------
+# 5. EXPORT DATA (optional)
+# ----------------------------------------------------------------------
+df_share.to_csv("/mnt/user-data/outputs/amc_market_share_2015_2025.csv")
+df_amc_aum.round(2).to_csv("/mnt/user-data/outputs/amc_aum_absolute_2015_2025.csv")
+print("Data exported to amc_market_share_2015_2025.csv and amc_aum_absolute_2015_2025.csv")
